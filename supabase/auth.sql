@@ -24,7 +24,9 @@ create policy profiles_select on public.profiles
 create policy profiles_update on public.profiles
   for update to authenticated using (id = auth.uid()) with check (id = auth.uid());
 
--- サインアップ時にプロフィールを自動作成(表示名は signUp の options.data.display_name から)
+-- 初回ログイン(サインアップ)時にプロフィールを自動作成。
+-- 表示名の既定は「ユーザー」+ID 先頭 4 文字。Google の本名やメールアドレスは、
+-- 意図せず公開されないよう既定では使いません(マイページで変更できます)。
 create or replace function public.handle_new_user()
 returns trigger
 language plpgsql
@@ -37,8 +39,7 @@ begin
     new.id,
     left(coalesce(
       nullif(btrim(new.raw_user_meta_data ->> 'display_name'), ''),
-      nullif(split_part(new.email, '@', 1), ''),
-      'user'
+      'ユーザー' || left(replace(new.id::text, '-', ''), 4)
     ), 30)
   );
   return new;
@@ -54,7 +55,7 @@ create trigger on_auth_user_created
 insert into public.profiles (id, display_name)
 select u.id,
        left(coalesce(nullif(btrim(u.raw_user_meta_data ->> 'display_name'), ''),
-                     nullif(split_part(u.email, '@', 1), ''), 'user'), 30)
+                     'ユーザー' || left(replace(u.id::text, '-', ''), 4)), 30)
 from auth.users u
 on conflict (id) do nothing;
 

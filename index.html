@@ -52,7 +52,7 @@ form.compose{padding:14px;display:flex;flex-direction:column;gap:10px}
 form.compose h2,.thread-head h2{margin:0}
 form.compose h2{font-size:14px;letter-spacing:.06em}
 label{font-size:12px;color:var(--muted);display:block;margin-bottom:3px}
-input[type=text],input[type=email],input[type=password],textarea{width:100%;font:inherit;color:var(--ink);background:var(--surface-2);border:1px solid var(--line);border-radius:6px;padding:8px 10px}
+input[type=text],textarea{width:100%;font:inherit;color:var(--ink);background:var(--surface-2);border:1px solid var(--line);border-radius:6px;padding:8px 10px}
 textarea{min-height:96px;resize:vertical;line-height:1.6}
 input:focus-visible,textarea:focus-visible,button:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
 button{font:inherit;cursor:pointer;border-radius:6px}
@@ -100,12 +100,6 @@ body{margin:0}
 .acct .btn{padding:4px 14px;font-size:13px}
 .gate{padding:14px;display:flex;flex-direction:column;gap:10px}
 .gate p{margin:0;font-size:14px}
-.auth-card{max-width:420px;margin-inline:auto}
-.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin:-4px 0 4px}
-.tabs button{background:none;border:0;border-bottom:2px solid transparent;border-radius:0;padding:6px 14px;font-weight:700;color:var(--muted)}
-.tabs button[aria-selected="true"]{color:var(--accent);border-bottom-color:var(--accent)}
-.hint{margin:0;font-size:13px;color:var(--muted);min-height:1.7em}
-.hint.err{color:var(--danger)}
 .mypage{max-width:720px;margin-inline:auto;display:flex;flex-direction:column;gap:16px}
 .section{padding:16px 18px;display:flex;flex-direction:column;gap:10px}
 .section h2{margin:0;font-size:15px;letter-spacing:.06em}
@@ -152,35 +146,6 @@ body{margin:0}
       <div class="panel placeholder" id="placeholder">左の一覧からスレッドを選んでください。</div>
     </section>
   </main>
-
-  <section id="authPage" hidden>
-    <form class="panel compose auth-card" id="authForm" novalidate>
-      <div class="tabs" role="tablist">
-        <button type="button" role="tab" id="tab-login" aria-selected="true">ログイン</button>
-        <button type="button" role="tab" id="tab-signup" aria-selected="false">新規登録</button>
-      </div>
-      <div id="af-name-wrap" hidden><label for="af-name">表示名(書き込みに使われます)</label><input type="text" id="af-name" maxlength="30" autocomplete="nickname"></div>
-      <div><label for="af-email">メールアドレス</label><input type="email" id="af-email" autocomplete="email"></div>
-      <p class="hint" id="af-help" hidden>登録したメールアドレスを入力してください。パスワード再設定用のリンクをお送りします。</p>
-      <div id="af-pass-wrap"><label for="af-pass" id="af-pass-label">パスワード</label><input type="password" id="af-pass" autocomplete="current-password"></div>
-      <div class="row">
-        <button class="btn" type="submit" id="af-submit">ログイン</button>
-        <button class="ghost" type="button" id="af-alt">パスワードを忘れた方</button>
-        <button class="ghost" type="button" id="af-cancel">掲示板へ戻る</button>
-      </div>
-      <p class="hint" id="af-msg" role="status"></p>
-    </form>
-  </section>
-
-  <section id="resetPage" hidden>
-    <form class="panel compose auth-card" id="resetForm" novalidate>
-      <h2>新しいパスワードを設定</h2>
-      <div><label for="rs-pass">新しいパスワード(8文字以上)</label><input type="password" id="rs-pass" autocomplete="new-password"></div>
-      <div><label for="rs-pass2">新しいパスワード(確認)</label><input type="password" id="rs-pass2" autocomplete="new-password"></div>
-      <div class="row"><button class="btn" type="submit" id="rs-submit">変更する</button></div>
-      <p class="hint" id="rs-msg" role="status"></p>
-    </form>
-  </section>
 
   <section id="myPage" hidden>
     <div class="mypage">
@@ -382,8 +347,7 @@ body{margin:0}
   var client = null;                    // Supabase client (null in browser-local mode)
   var user = null;                      // {id, email, displayName} when logged in
   var authReady = false, prevUserId = null;
-  var page = "board", authMode = "login";
-  var recovering = false;               // true while the user arrived through a password-reset link
+  var page = "board";
   var myReplies = [], wdArmed = false, stickyNotice = false;   // stickyNotice: keep the notice across the next page change
 
   function say(msg, ok){
@@ -466,9 +430,12 @@ body{margin:0}
   function gate(msg){
     return h("div", { class:"panel gate" },
       h("p", { text:msg }),
-      h("div", { class:"row" },
-        h("button", { type:"button", class:"btn", onclick:function(){ go("login"); } }, "ログイン"),
-        h("button", { type:"button", class:"ghost", onclick:function(){ go("signup"); } }, "新規登録")));
+      h("div", { class:"row" }, h("button", { type:"button", class:"btn", onclick:startLogin }, "Google でログイン")));
+  }
+  // "投稿者: <name> [表示名を変更]" — the default display name is not taken from the Google profile
+  function authorNodes(){
+    return [document.createTextNode("投稿者: " + user.displayName + " "),
+      h("button", { type:"button", class:"ghost", onclick:function(){ go("mypage"); } }, "表示名を変更")];
   }
 
   function renderView(){
@@ -509,7 +476,7 @@ body{margin:0}
         });
       } },
         h("h2", { text:"書き込む" }),
-        memMode ? h("div", null, h("label", { for:"rp-name", text:"名前" }), nameIn) : h("p", { class:"sub", text:"投稿者: " + user.displayName }),
+        memMode ? h("div", null, h("label", { for:"rp-name", text:"名前" }), nameIn) : h.apply(null, ["p", { class:"sub" }].concat(authorNodes())),
         h("div", null, h("label", { for:"rp-body", text:"書き込みの内容" }), bodyIn),
         h("div", { class:"row" }, h("button", { class:"btn", type:"submit" }, "書き込む"))
       );
@@ -574,36 +541,25 @@ body{margin:0}
     });
   }
 
-  /* ---- pages: board / login / my page (hash routing) ---- */
+  /* ---- pages: board / my page (hash routing) ---- */
   function go(to){ if (location.hash === "#" + to) route(); else location.hash = to; }
   function redirect(to){
     try { history.replaceState(null, "", "#" + to); route(); } catch(e){ location.hash = to; }
   }
   function route(){
     var hash = location.hash.replace(/^#/, ""), want = "board";
-    if (!memMode){
-      if (hash === "login" || hash === "signup" || hash === "forgot") want = "auth";
-      else if (hash === "mypage") want = "mypage";
-      else if (hash === "reset") want = "reset";
-    }
-    if (want === "mypage" && authReady && !user) return redirect("login");
-    if (want === "auth" && user) return redirect("board");
-    if (want === "reset" && !recovering){                    // only reachable through a reset link
-      if (authReady) return redirect(user ? "board" : "login");
-      want = "wait";
+    if (!memMode && hash === "mypage") want = "mypage";
+    if (want === "mypage" && authReady && !user){
+      redirect("board");
+      say("マイページを見るにはログインしてください。");
+      return;
     }
     if (want === "mypage" && !authReady) want = "wait";     // session still being restored
     var changed = want !== page;
-    if (changed){
-      if (stickyNotice) stickyNotice = false; else say("");
-      if (page === "reset") recovering = false;
-    }
+    if (changed){ if (stickyNotice) stickyNotice = false; else say(""); }
     page = want;
     $("main").hidden = want !== "board";
-    $("authPage").hidden = want !== "auth";
     $("myPage").hidden = want !== "mypage";
-    $("resetPage").hidden = want !== "reset";
-    if (want === "auth") setAuthMode(hash === "signup" || hash === "forgot" ? hash : "login");
     if (changed){
       if (want === "mypage"){ wdArmed = false; renderMyPage(); loadHistory(); }
       window.scrollTo(0, 0);
@@ -623,9 +579,7 @@ body{margin:0}
       if (page !== "mypage") box.appendChild(ghost("マイページ", function(){ go("mypage"); }));
       box.appendChild(ghost("ログアウト", logout));
     } else {
-      if (page !== "board") box.appendChild(ghost("掲示板", function(){ go("board"); }));
-      if (page !== "auth" || authMode !== "login") box.appendChild(ghost("ログイン", function(){ go("login"); }));
-      if (page !== "auth" || authMode !== "signup") box.appendChild(h("button", { type:"button", class:"btn", onclick:function(){ go("signup"); } }, "新規登録"));
+      box.appendChild(h("button", { type:"button", class:"btn", onclick:startLogin }, "Google でログイン"));
     }
   }
 
@@ -637,104 +591,20 @@ body{margin:0}
     if (!can) gateBox.appendChild(gate("スレッドを立てるにはログインが必要です。"));
     $("nt-name-wrap").hidden = !memMode;
     $("nt-as").hidden = memMode || !user;
-    $("nt-as").textContent = user ? "投稿者: " + user.displayName : "";
+    $("nt-as").textContent = "";
+    if (user) authorNodes().forEach(function(n){ $("nt-as").appendChild(n); });
   }
 
-  /* ---- auth ---- */
-  function setMsg(t, err){ var m = $("af-msg"); m.textContent = t || ""; m.className = "hint" + (err ? " err" : ""); }
-  function setAuthMode(m){          // m: "login" | "signup" | "forgot"
-    var signup = m === "signup", forgot = m === "forgot";
-    if (m !== authMode) setMsg("");
-    authMode = m;
-    $("tab-login").setAttribute("aria-selected", String(m === "login"));
-    $("tab-signup").setAttribute("aria-selected", String(signup));
-    $("af-name-wrap").hidden = !signup;
-    $("af-pass-wrap").hidden = forgot;
-    $("af-help").hidden = !forgot;
-    $("af-alt").hidden = signup;
-    $("af-alt").textContent = forgot ? "ログインに戻る" : "パスワードを忘れた方";
-    $("af-submit").textContent = signup ? "登録する" : forgot ? "再設定メールを送る" : "ログイン";
-    $("af-pass-label").textContent = signup ? "パスワード(8文字以上)" : "パスワード";
-    $("af-pass").setAttribute("autocomplete", signup ? "new-password" : "current-password");
-  }
+  /* ---- auth (Google) ---- */
   function siteUrl(){ return /^https?:/.test(location.href) ? location.origin + location.pathname : undefined; }
-  function authMsg(e){
-    var c = e && (e.code || e.error_code), m = (e && e.message) || "";
-    if (c === "invalid_credentials" || /invalid login credentials/i.test(m)) return "メールアドレスまたはパスワードが正しくありません。";
-    if (c === "email_not_confirmed" || /not confirmed/i.test(m)) return "メールアドレスの確認が済んでいません。確認メールのリンクを開いてください。";
-    if (c === "user_already_exists" || /already registered/i.test(m)) return "このメールアドレスは既に登録されています。ログインしてください。";
-    if (c === "weak_password") return "パスワードが弱すぎます。8文字以上の、推測されにくいものにしてください。";
-    if (c === "email_address_invalid" || /invalid.*email/i.test(m)) return "メールアドレスの形式が正しくありません。";
-    if (c === "over_email_send_rate_limit" || c === "over_request_rate_limit" || (e && e.status === 429)) return "短時間に操作が多すぎます。しばらく待ってからお試しください。";
-    if (c === "signup_disabled") return "現在、新規登録を受け付けていません。";
-    if (c === "same_password") return "現在と同じパスワードです。別のパスワードにしてください。";
-    if (c === "email_send_failed" || /sending .*email/i.test(m)) return "メールを送信できませんでした。時間をおいてもう一度お試しください。";
-    if (c === "session_not_found" || c === "not_authenticated" || (e && e.status === 401)) return "リンクの有効期限が切れています。もう一度、再設定メールを送信してください。";
-    return "うまくいきませんでした。時間をおいてもう一度お試しください。";
-  }
-
-  $("tab-login").addEventListener("click", function(){ go("login"); });
-  $("tab-signup").addEventListener("click", function(){ go("signup"); });
-  $("af-alt").addEventListener("click", function(){ go(authMode === "forgot" ? "login" : "forgot"); });
-  $("af-cancel").addEventListener("click", function(){ go("board"); });
-  $("authForm").addEventListener("submit", function(e){
-    e.preventDefault();
+  function startLogin(){
     if (!client) return;
-    if (authMode === "forgot"){
-      var addr = $("af-email").value.trim();
-      if (!/^\S+@\S+\.\S+$/.test(addr)){ setMsg("メールアドレスを正しく入力してください。", true); return; }
-      setMsg("");
-      $("af-submit").disabled = true;
-      client.auth.resetPasswordForEmail(addr, { redirectTo:siteUrl() }).then(function(res){
-        if (res.error) throw res.error;
-        // same answer whether or not the address is registered
-        setMsg("登録されているメールアドレスであれば、再設定用のリンクを送信しました。メールをご確認ください。");
-      }).catch(function(err){ setMsg(authMsg(err), true); })
-        .then(function(){ $("af-submit").disabled = false; });
-      return;
-    }
-    var signup = authMode === "signup";
-    var name = $("af-name").value.trim(), email = $("af-email").value.trim(), pass = $("af-pass").value;
-    if (signup && !name){ setMsg("表示名を入力してください。", true); return; }
-    if (!/^\S+@\S+\.\S+$/.test(email)){ setMsg("メールアドレスを正しく入力してください。", true); return; }
-    if (signup ? pass.length < 8 : !pass){ setMsg(signup ? "パスワードは8文字以上で入力してください。" : "パスワードを入力してください。", true); return; }
-    setMsg("");
-    $("af-submit").disabled = true;
-    var req = signup
-      ? client.auth.signUp({ email:email, password:pass, options:{
-          data:{ display_name:name },
-          emailRedirectTo:siteUrl() } })
-      : client.auth.signInWithPassword({ email:email, password:pass });
-    req.then(function(res){
+    say("");
+    // the browser goes to Google and comes back here with a session, which supabase-js picks up from the URL
+    client.auth.signInWithOAuth({ provider:"google", options:{ redirectTo:siteUrl() } }).then(function(res){
       if (res.error) throw res.error;
-      var u = res.data && res.data.user;
-      // an already-registered address comes back as a user without identities
-      if (signup && u && u.identities && !u.identities.length){ setMsg(authMsg({ code:"user_already_exists" }), true); return; }
-      if (signup && !res.data.session){ setMsg("確認メールを送信しました。メール内のリンクを開いてから、ログインしてください。"); return; }
-      $("af-pass").value = "";
-      go("board");
-    }).catch(function(err){ setMsg(authMsg(err), true); })
-      .then(function(){ $("af-submit").disabled = false; });
-  });
-
-  // arrived through the reset link: supabase-js has signed the user in, now ask for the new password
-  $("resetForm").addEventListener("submit", function(e){
-    e.preventDefault();
-    if (!client || !recovering) return;
-    var msg = function(t, err){ var m = $("rs-msg"); m.textContent = t || ""; m.className = "hint" + (err ? " err" : ""); };
-    var p1 = $("rs-pass").value, p2 = $("rs-pass2").value;
-    if (p1.length < 8){ msg("パスワードは8文字以上で入力してください。", true); return; }
-    if (p1 !== p2){ msg("確認用のパスワードが一致しません。", true); return; }
-    msg("");
-    $("rs-submit").disabled = true;
-    client.auth.updateUser({ password:p1 }).then(function(res){
-      if (res.error) throw res.error;
-      $("rs-pass").value = ""; $("rs-pass2").value = "";
-      recovering = false; stickyNotice = true; go("board");
-      say("パスワードを変更しました。", true);
-    }).catch(function(err){ msg(authMsg(err), true); })
-      .then(function(){ $("rs-submit").disabled = false; });
-  });
+    }).catch(function(){ say("Google ログインを開始できませんでした。時間をおいてもう一度お試しください。"); });
+  }
 
   function logout(){
     client.auth.signOut().catch(function(){}).then(function(){ go("board"); });
@@ -743,8 +613,7 @@ body{margin:0}
   function applySession(session){
     var u = session && session.user;
     if (!u){ user = null; authReady = true; return afterAuth(); }
-    var meta = u.user_metadata || {};
-    var fallback = meta.display_name || (u.email || "").split("@")[0] || "user";
+    var fallback = "ユーザー";
     return client.from("profiles").select("display_name").eq("id", u.id).maybeSingle().then(function(res){
       return (res.data && res.data.display_name) || fallback;
     }, function(){ return fallback; }).then(function(name){
@@ -903,22 +772,16 @@ body{margin:0}
   start();
   if (client){
     // defer: supabase-js must not be called from inside its own auth callback
-    client.auth.onAuthStateChange(function(event, session){
-      setTimeout(function(){
-        Promise.resolve(applySession(session)).then(function(){
-          if (event === "PASSWORD_RECOVERY" && user){ recovering = true; go("reset"); }
-        });
-      }, 0);
-    });
+    client.auth.onAuthStateChange(function(event, session){ setTimeout(function(){ applySession(session); }, 0); });
   } else {
     authReady = true;
   }
   window.addEventListener("hashchange", route);
   renderCompose(); renderAccount();
-  if (client && /[#&]error_code=/.test(location.hash)){
-    // expired / already-used email link (supabase puts the error in the URL hash)
-    redirect("login");
-    setMsg("リンクの有効期限が切れているか、すでに使われています。ログインするか、パスワードの再設定をお試しください。", true);
+  if (client && /[#&?]error(_code)?=/.test(location.hash + location.search)){
+    // the round trip to Google failed or was cancelled (the error comes back in the URL)
+    redirect("board");
+    say("ログインできませんでした。もう一度お試しください。");
   } else {
     route();
   }
