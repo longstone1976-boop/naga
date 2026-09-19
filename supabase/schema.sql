@@ -1,5 +1,7 @@
 -- みんなの掲示板 用スキーマ
 -- Supabase ダッシュボードの「SQL Editor」に貼り付けて実行してください。
+-- ログイン機能を使う場合は、このあとに auth.sql も実行してください
+-- (ここで作る「誰でも書き込み・編集・削除できる」ポリシーは auth.sql で本人のみに置き換わります)。
 
 create table if not exists public.threads (
   id         uuid primary key default gen_random_uuid(),

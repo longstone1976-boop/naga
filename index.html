@@ -52,7 +52,7 @@ form.compose{padding:14px;display:flex;flex-direction:column;gap:10px}
 form.compose h2,.thread-head h2{margin:0}
 form.compose h2{font-size:14px;letter-spacing:.06em}
 label{font-size:12px;color:var(--muted);display:block;margin-bottom:3px}
-input[type=text],textarea{width:100%;font:inherit;color:var(--ink);background:var(--surface-2);border:1px solid var(--line);border-radius:6px;padding:8px 10px}
+input[type=text],input[type=email],input[type=password],textarea{width:100%;font:inherit;color:var(--ink);background:var(--surface-2);border:1px solid var(--line);border-radius:6px;padding:8px 10px}
 textarea{min-height:96px;resize:vertical;line-height:1.6}
 input:focus-visible,textarea:focus-visible,button:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
 button{font:inherit;cursor:pointer;border-radius:6px}
@@ -91,6 +91,34 @@ button{font:inherit;cursor:pointer;border-radius:6px}
   .thread-item,.btn,.ghost{transition:background .12s,border-color .12s,color .12s}
 }
 body{margin:0}
+[hidden]{display:none !important}
+.notice.ok{background:var(--accent-soft);color:var(--accent)}
+.top-right{display:flex;align-items:center;gap:8px 12px;flex-wrap:wrap}
+.acct{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.who{font-size:13px;font-weight:700;overflow-wrap:anywhere}
+.acct .ghost,.gate .ghost{padding:4px 12px;font-size:13px}
+.acct .btn{padding:4px 14px;font-size:13px}
+.gate{padding:14px;display:flex;flex-direction:column;gap:10px}
+.gate p{margin:0;font-size:14px}
+.auth-card{max-width:420px;margin-inline:auto}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin:-4px 0 4px}
+.tabs button{background:none;border:0;border-bottom:2px solid transparent;border-radius:0;padding:6px 14px;font-weight:700;color:var(--muted)}
+.tabs button[aria-selected="true"]{color:var(--accent);border-bottom-color:var(--accent)}
+.hint{margin:0;font-size:13px;color:var(--muted);min-height:1.7em}
+.hint.err{color:var(--danger)}
+.mypage{max-width:720px;margin-inline:auto;display:flex;flex-direction:column;gap:16px}
+.section{padding:16px 18px;display:flex;flex-direction:column;gap:10px}
+.section h2{margin:0;font-size:15px;letter-spacing:.06em}
+.section p{margin:0;font-size:14px}
+.section .kv{font-size:13px;color:var(--muted);overflow-wrap:anywhere}
+.mp-row{display:flex;align-items:center;gap:8px;padding-right:12px;flex-wrap:wrap}
+.mp-row .thread-item{flex:1;min-width:0}
+.mp-actions{display:flex;gap:6px;flex-shrink:0}
+.badge{display:inline-block;font-size:11px;font-weight:700;color:var(--accent);background:var(--accent-soft);border-radius:4px;padding:0 6px;margin-right:6px;vertical-align:1px}
+.snippet{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.danger-zone{border-color:var(--danger)}
+.btn.danger{background:var(--danger);border-color:var(--danger);color:#fff}
+@media (max-width:760px){.top-right{width:100%}}
 </style>
 </head>
 <body>
@@ -98,7 +126,10 @@ body{margin:0}
 <div class="wrap">
   <header class="top">
     <h1>みんなの掲示板</h1>
-    <span class="sub" id="status">読み込み中…</span>
+    <div class="top-right">
+      <span class="sub" id="status">読み込み中…</span>
+      <nav class="acct" id="acct" aria-label="アカウント"></nav>
+    </div>
   </header>
   <div class="notice" id="notice" hidden></div>
   <main id="main" data-view="list">
@@ -107,10 +138,12 @@ body{margin:0}
         <div class="list-head">スレッド一覧</div>
         <ul class="threads" id="threads"></ul>
       </section>
+      <div id="newGate" hidden></div>
       <form class="panel compose" id="newForm">
         <h2>新しいスレッドを立てる</h2>
         <div><label for="nt-title">スレッドのタイトル</label><input type="text" id="nt-title" maxlength="80" required></div>
-        <div><label for="nt-name">名前</label><input type="text" id="nt-name" maxlength="30" placeholder="名無しさん"></div>
+        <div id="nt-name-wrap"><label for="nt-name">名前</label><input type="text" id="nt-name" maxlength="30" placeholder="名無しさん"></div>
+        <p class="sub" id="nt-as" hidden></p>
         <div><label for="nt-body">最初の書き込み</label><textarea id="nt-body" maxlength="2000" required></textarea></div>
         <div class="row"><button class="btn" type="submit">スレッドを立てる</button></div>
       </form>
@@ -119,6 +152,55 @@ body{margin:0}
       <div class="panel placeholder" id="placeholder">左の一覧からスレッドを選んでください。</div>
     </section>
   </main>
+
+  <section id="authPage" hidden>
+    <form class="panel compose auth-card" id="authForm" novalidate>
+      <div class="tabs" role="tablist">
+        <button type="button" role="tab" id="tab-login" aria-selected="true">ログイン</button>
+        <button type="button" role="tab" id="tab-signup" aria-selected="false">新規登録</button>
+      </div>
+      <div id="af-name-wrap" hidden><label for="af-name">表示名(書き込みに使われます)</label><input type="text" id="af-name" maxlength="30" autocomplete="nickname"></div>
+      <div><label for="af-email">メールアドレス</label><input type="email" id="af-email" autocomplete="email"></div>
+      <p class="hint" id="af-help" hidden>登録したメールアドレスを入力してください。パスワード再設定用のリンクをお送りします。</p>
+      <div id="af-pass-wrap"><label for="af-pass" id="af-pass-label">パスワード</label><input type="password" id="af-pass" autocomplete="current-password"></div>
+      <div class="row">
+        <button class="btn" type="submit" id="af-submit">ログイン</button>
+        <button class="ghost" type="button" id="af-alt">パスワードを忘れた方</button>
+        <button class="ghost" type="button" id="af-cancel">掲示板へ戻る</button>
+      </div>
+      <p class="hint" id="af-msg" role="status"></p>
+    </form>
+  </section>
+
+  <section id="resetPage" hidden>
+    <form class="panel compose auth-card" id="resetForm" novalidate>
+      <h2>新しいパスワードを設定</h2>
+      <div><label for="rs-pass">新しいパスワード(8文字以上)</label><input type="password" id="rs-pass" autocomplete="new-password"></div>
+      <div><label for="rs-pass2">新しいパスワード(確認)</label><input type="password" id="rs-pass2" autocomplete="new-password"></div>
+      <div class="row"><button class="btn" type="submit" id="rs-submit">変更する</button></div>
+      <p class="hint" id="rs-msg" role="status"></p>
+    </form>
+  </section>
+
+  <section id="myPage" hidden>
+    <div class="mypage">
+      <form class="panel section" id="profileForm">
+        <h2>プロフィール</h2>
+        <div class="kv">メールアドレス: <span id="mp-email"></span></div>
+        <div><label for="mp-name">表示名</label><input type="text" id="mp-name" maxlength="30" autocomplete="nickname"></div>
+        <div class="row"><button class="btn" type="submit">保存</button></div>
+      </form>
+      <div class="panel">
+        <div class="list-head">自分が立てたスレッド</div>
+        <ul class="threads" id="mp-threads"></ul>
+      </div>
+      <div class="panel">
+        <div class="list-head">書き込み履歴</div>
+        <ul class="threads" id="mp-history"></ul>
+      </div>
+      <div class="panel section danger-zone" id="mp-withdraw"></div>
+    </div>
+  </section>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.116.0/dist/umd/supabase.min.js" integrity="sha384-JBR+x8blGwjDRO63aHCGiZMD4VNiTR4ZUGA+N6ZKLf3zNt1fK8IBpcgPaMrxqWBp" crossorigin="anonymous"></script>
@@ -297,18 +379,27 @@ body{margin:0}
   var armed = null;        // id awaiting delete confirmation
   var unsubReplies = null;
   var busy = false;
+  var client = null;                    // Supabase client (null in browser-local mode)
+  var user = null;                      // {id, email, displayName} when logged in
+  var authReady = false, prevUserId = null;
+  var page = "board", authMode = "login";
+  var recovering = false;               // true while the user arrived through a password-reset link
+  var myReplies = [], wdArmed = false, stickyNotice = false;   // stickyNotice: keep the notice across the next page change
 
-  function say(msg){
+  function say(msg, ok){
     var n = $("notice");
     if (!msg){ n.hidden = true; return; }
-    n.textContent = msg; n.hidden = false;
+    n.textContent = msg; n.className = ok ? "notice ok" : "notice"; n.hidden = false;
   }
   function fail(e){
     var c = e && e.code;
     if (c === "quota_exceeded") say("保存できる件数の上限に達しました。古いスレッドを削除してからもう一度お試しください。");
-    else if (c === "invalid_argument" || c === "42501") say("この掲示板への書き込み権限がありません。閲覧のみのアカウントの可能性があります。");
+    else if (c === "invalid_argument" || c === "42501" || c === "PGRST301" || c === "PGRST303") say("この操作にはログインが必要か、権限がありません。ログインし直してからお試しください。");
     else say("保存できませんでした。少し待ってからもう一度お試しください。");
   }
+  // browser-local mode has no accounts: everyone may write and edit
+  function canWrite(){ return memMode || !!user; }
+  function canModify(p){ return memMode || !!(user && p.userId && p.userId === user.id); }
   function run(fn){
     if (busy) return Promise.resolve();
     busy = true; say("");
@@ -356,18 +447,28 @@ body{margin:0}
           h("button", { type:"button", class:"ghost", onclick:function(){ editing = null; renderView(); } }, "キャンセル")));
     } else {
       content = h("p", { class:"body", text:p.body });
-      actions.appendChild(h("button", { type:"button", class:"ghost", onclick:function(){
-        armed = null; editing = { id:p.id, kind:kind, title:p.title || "", body:p.body }; renderView();
-        var f = $("edit-body"); if (f) f.focus();
-      } }, "編集"));
-      var isArmed = armed === p.id;
-      actions.appendChild(h("button", { type:"button", class:"ghost danger" + (isArmed ? " armed" : ""), onclick:function(){
-        if (armed === p.id){ removePost(kind, p); } else { armed = p.id; renderView(); }
-      } }, isArmed ? (kind === "thread" ? "スレッドごと削除する" : "本当に削除する") : "削除"));
-      if (isArmed) actions.appendChild(h("button", { type:"button", class:"ghost", onclick:function(){ armed = null; renderView(); } }, "やめる"));
+      if (canModify(p)){
+        actions.appendChild(h("button", { type:"button", class:"ghost", onclick:function(){
+          armed = null; editing = { id:p.id, kind:kind, title:p.title || "", body:p.body }; renderView();
+          var f = $("edit-body"); if (f) f.focus();
+        } }, "編集"));
+        var isArmed = armed === p.id;
+        actions.appendChild(h("button", { type:"button", class:"ghost danger" + (isArmed ? " armed" : ""), onclick:function(){
+          if (armed === p.id){ removePost(kind, p); } else { armed = p.id; renderView(); }
+        } }, isArmed ? (kind === "thread" ? "スレッドごと削除する" : "本当に削除する") : "削除"));
+        if (isArmed) actions.appendChild(h("button", { type:"button", class:"ghost", onclick:function(){ armed = null; renderView(); } }, "やめる"));
+      }
     }
-    if (!isEditing) meta.appendChild(actions);
+    if (!isEditing && actions.childNodes.length) meta.appendChild(actions);
     return h("li", { class:"post" }, meta, content);
+  }
+
+  function gate(msg){
+    return h("div", { class:"panel gate" },
+      h("p", { text:msg }),
+      h("div", { class:"row" },
+        h("button", { type:"button", class:"btn", onclick:function(){ go("login"); } }, "ログイン"),
+        h("button", { type:"button", class:"ghost", onclick:function(){ go("signup"); } }, "新規登録")));
   }
 
   function renderView(){
@@ -389,26 +490,32 @@ body{margin:0}
     list.appendChild(postNode(1, Object.assign({}, t), "thread"));
     replies.forEach(function(r, i){ list.appendChild(postNode(i + 2, r, "reply")); });
 
-    var nameIn = h("input", { type:"text", id:"rp-name", maxlength:"30", placeholder:DEFAULT_NAME, value:getName() });
-    var bodyIn = h("textarea", { id:"rp-body", maxlength:"2000", required:true });
-    var form = h("form", { class:"panel compose", id:"replyForm", onsubmit:function(e){
-      e.preventDefault();
-      var name = nameIn.value.trim(), body = bodyIn.value.trim();
-      if (!body) return;
-      saveName(name);
-      run(function(){
-        var now = Date.now();
-        return repliesCol(t.id).add({ name:name, body:body, createdAt:now }).then(function(){
-          bodyIn.value = "";
-          return db.collection("threads").doc(t.id).update({ updatedAt:now });
+    var form;
+    if (canWrite()){
+      var nameIn = memMode ? h("input", { type:"text", id:"rp-name", maxlength:"30", placeholder:DEFAULT_NAME, value:getName() }) : null;
+      var bodyIn = h("textarea", { id:"rp-body", maxlength:"2000", required:true });
+      form = h("form", { class:"panel compose", id:"replyForm", onsubmit:function(e){
+        e.preventDefault();
+        var name = memMode ? nameIn.value.trim() : user.displayName, body = bodyIn.value.trim();
+        if (!body) return;
+        if (memMode) saveName(name);
+        run(function(){
+          var now = Date.now();
+          return repliesCol(t.id).add({ name:name, body:body, createdAt:now }).then(function(){
+            bodyIn.value = "";
+            // with Supabase the thread's updated_at is bumped by a DB trigger (repliers don't own the thread)
+            if (memMode) return db.collection("threads").doc(t.id).update({ updatedAt:now });
+          });
         });
-      });
-    } },
-      h("h2", { text:"書き込む" }),
-      h("div", null, h("label", { for:"rp-name", text:"名前" }), nameIn),
-      h("div", null, h("label", { for:"rp-body", text:"書き込みの内容" }), bodyIn),
-      h("div", { class:"row" }, h("button", { class:"btn", type:"submit" }, "書き込む"))
-    );
+      } },
+        h("h2", { text:"書き込む" }),
+        memMode ? h("div", null, h("label", { for:"rp-name", text:"名前" }), nameIn) : h("p", { class:"sub", text:"投稿者: " + user.displayName }),
+        h("div", null, h("label", { for:"rp-body", text:"書き込みの内容" }), bodyIn),
+        h("div", { class:"row" }, h("button", { class:"btn", type:"submit" }, "書き込む"))
+      );
+    } else {
+      form = gate("返信するにはログインが必要です。");
+    }
     view.appendChild(head);
     view.appendChild(h("div", { class:"panel" }, list));
     view.appendChild(form);
@@ -431,7 +538,7 @@ body{margin:0}
       var focused = document.activeElement && document.activeElement.id;
       if (editing && (focused === "edit-body" || focused === "edit-title")) return;
       renderView();
-      if ($("rp-body")){ $("rp-body").value = keep; $("rp-name").value = kn; if (focused === "rp-body") $("rp-body").focus(); }
+      if ($("rp-body")){ $("rp-body").value = keep; if ($("rp-name")) $("rp-name").value = kn; if (focused === "rp-body") $("rp-body").focus(); }
     }, fail);
   }
 
@@ -455,6 +562,8 @@ body{margin:0}
       armed = null;
       if (kind === "reply") return repliesCol(selectedId).doc(p.id).delete();
       var tid = p.id;
+      // in Supabase, replies (including other people's) go with the thread via ON DELETE CASCADE
+      if (!memMode) return db.collection("threads").doc(tid).delete().then(function(){ $("main").dataset.view = "list"; });
       return repliesCol(tid).get().then(function(s){
         return Promise.all(s.docs.map(function(d){ return repliesCol(tid).doc(d.id).delete(); }));
       }).then(function(){
@@ -465,12 +574,290 @@ body{margin:0}
     });
   }
 
+  /* ---- pages: board / login / my page (hash routing) ---- */
+  function go(to){ if (location.hash === "#" + to) route(); else location.hash = to; }
+  function redirect(to){
+    try { history.replaceState(null, "", "#" + to); route(); } catch(e){ location.hash = to; }
+  }
+  function route(){
+    var hash = location.hash.replace(/^#/, ""), want = "board";
+    if (!memMode){
+      if (hash === "login" || hash === "signup" || hash === "forgot") want = "auth";
+      else if (hash === "mypage") want = "mypage";
+      else if (hash === "reset") want = "reset";
+    }
+    if (want === "mypage" && authReady && !user) return redirect("login");
+    if (want === "auth" && user) return redirect("board");
+    if (want === "reset" && !recovering){                    // only reachable through a reset link
+      if (authReady) return redirect(user ? "board" : "login");
+      want = "wait";
+    }
+    if (want === "mypage" && !authReady) want = "wait";     // session still being restored
+    var changed = want !== page;
+    if (changed){
+      if (stickyNotice) stickyNotice = false; else say("");
+      if (page === "reset") recovering = false;
+    }
+    page = want;
+    $("main").hidden = want !== "board";
+    $("authPage").hidden = want !== "auth";
+    $("myPage").hidden = want !== "mypage";
+    $("resetPage").hidden = want !== "reset";
+    if (want === "auth") setAuthMode(hash === "signup" || hash === "forgot" ? hash : "login");
+    if (changed){
+      if (want === "mypage"){ wdArmed = false; renderMyPage(); loadHistory(); }
+      window.scrollTo(0, 0);
+    }
+    renderAccount();
+  }
+  function openThread(id){ go("board"); select(id); }
+
+  function renderAccount(){
+    var box = $("acct");
+    box.textContent = "";
+    if (memMode || !authReady) return;
+    var ghost = function(label, fn){ return h("button", { type:"button", class:"ghost", onclick:fn }, label); };
+    if (user){
+      box.appendChild(h("span", { class:"who", text:user.displayName + " さん" }));
+      if (page !== "board") box.appendChild(ghost("掲示板", function(){ go("board"); }));
+      if (page !== "mypage") box.appendChild(ghost("マイページ", function(){ go("mypage"); }));
+      box.appendChild(ghost("ログアウト", logout));
+    } else {
+      if (page !== "board") box.appendChild(ghost("掲示板", function(){ go("board"); }));
+      if (page !== "auth" || authMode !== "login") box.appendChild(ghost("ログイン", function(){ go("login"); }));
+      if (page !== "auth" || authMode !== "signup") box.appendChild(h("button", { type:"button", class:"btn", onclick:function(){ go("signup"); } }, "新規登録"));
+    }
+  }
+
+  function renderCompose(){
+    var can = canWrite(), gateBox = $("newGate");
+    $("newForm").hidden = !can;
+    gateBox.textContent = "";
+    gateBox.hidden = can;
+    if (!can) gateBox.appendChild(gate("スレッドを立てるにはログインが必要です。"));
+    $("nt-name-wrap").hidden = !memMode;
+    $("nt-as").hidden = memMode || !user;
+    $("nt-as").textContent = user ? "投稿者: " + user.displayName : "";
+  }
+
+  /* ---- auth ---- */
+  function setMsg(t, err){ var m = $("af-msg"); m.textContent = t || ""; m.className = "hint" + (err ? " err" : ""); }
+  function setAuthMode(m){          // m: "login" | "signup" | "forgot"
+    var signup = m === "signup", forgot = m === "forgot";
+    if (m !== authMode) setMsg("");
+    authMode = m;
+    $("tab-login").setAttribute("aria-selected", String(m === "login"));
+    $("tab-signup").setAttribute("aria-selected", String(signup));
+    $("af-name-wrap").hidden = !signup;
+    $("af-pass-wrap").hidden = forgot;
+    $("af-help").hidden = !forgot;
+    $("af-alt").hidden = signup;
+    $("af-alt").textContent = forgot ? "ログインに戻る" : "パスワードを忘れた方";
+    $("af-submit").textContent = signup ? "登録する" : forgot ? "再設定メールを送る" : "ログイン";
+    $("af-pass-label").textContent = signup ? "パスワード(8文字以上)" : "パスワード";
+    $("af-pass").setAttribute("autocomplete", signup ? "new-password" : "current-password");
+  }
+  function siteUrl(){ return /^https?:/.test(location.href) ? location.origin + location.pathname : undefined; }
+  function authMsg(e){
+    var c = e && (e.code || e.error_code), m = (e && e.message) || "";
+    if (c === "invalid_credentials" || /invalid login credentials/i.test(m)) return "メールアドレスまたはパスワードが正しくありません。";
+    if (c === "email_not_confirmed" || /not confirmed/i.test(m)) return "メールアドレスの確認が済んでいません。確認メールのリンクを開いてください。";
+    if (c === "user_already_exists" || /already registered/i.test(m)) return "このメールアドレスは既に登録されています。ログインしてください。";
+    if (c === "weak_password") return "パスワードが弱すぎます。8文字以上の、推測されにくいものにしてください。";
+    if (c === "email_address_invalid" || /invalid.*email/i.test(m)) return "メールアドレスの形式が正しくありません。";
+    if (c === "over_email_send_rate_limit" || c === "over_request_rate_limit" || (e && e.status === 429)) return "短時間に操作が多すぎます。しばらく待ってからお試しください。";
+    if (c === "signup_disabled") return "現在、新規登録を受け付けていません。";
+    if (c === "same_password") return "現在と同じパスワードです。別のパスワードにしてください。";
+    if (c === "email_send_failed" || /sending .*email/i.test(m)) return "メールを送信できませんでした。時間をおいてもう一度お試しください。";
+    if (c === "session_not_found" || c === "not_authenticated" || (e && e.status === 401)) return "リンクの有効期限が切れています。もう一度、再設定メールを送信してください。";
+    return "うまくいきませんでした。時間をおいてもう一度お試しください。";
+  }
+
+  $("tab-login").addEventListener("click", function(){ go("login"); });
+  $("tab-signup").addEventListener("click", function(){ go("signup"); });
+  $("af-alt").addEventListener("click", function(){ go(authMode === "forgot" ? "login" : "forgot"); });
+  $("af-cancel").addEventListener("click", function(){ go("board"); });
+  $("authForm").addEventListener("submit", function(e){
+    e.preventDefault();
+    if (!client) return;
+    if (authMode === "forgot"){
+      var addr = $("af-email").value.trim();
+      if (!/^\S+@\S+\.\S+$/.test(addr)){ setMsg("メールアドレスを正しく入力してください。", true); return; }
+      setMsg("");
+      $("af-submit").disabled = true;
+      client.auth.resetPasswordForEmail(addr, { redirectTo:siteUrl() }).then(function(res){
+        if (res.error) throw res.error;
+        // same answer whether or not the address is registered
+        setMsg("登録されているメールアドレスであれば、再設定用のリンクを送信しました。メールをご確認ください。");
+      }).catch(function(err){ setMsg(authMsg(err), true); })
+        .then(function(){ $("af-submit").disabled = false; });
+      return;
+    }
+    var signup = authMode === "signup";
+    var name = $("af-name").value.trim(), email = $("af-email").value.trim(), pass = $("af-pass").value;
+    if (signup && !name){ setMsg("表示名を入力してください。", true); return; }
+    if (!/^\S+@\S+\.\S+$/.test(email)){ setMsg("メールアドレスを正しく入力してください。", true); return; }
+    if (signup ? pass.length < 8 : !pass){ setMsg(signup ? "パスワードは8文字以上で入力してください。" : "パスワードを入力してください。", true); return; }
+    setMsg("");
+    $("af-submit").disabled = true;
+    var req = signup
+      ? client.auth.signUp({ email:email, password:pass, options:{
+          data:{ display_name:name },
+          emailRedirectTo:siteUrl() } })
+      : client.auth.signInWithPassword({ email:email, password:pass });
+    req.then(function(res){
+      if (res.error) throw res.error;
+      var u = res.data && res.data.user;
+      // an already-registered address comes back as a user without identities
+      if (signup && u && u.identities && !u.identities.length){ setMsg(authMsg({ code:"user_already_exists" }), true); return; }
+      if (signup && !res.data.session){ setMsg("確認メールを送信しました。メール内のリンクを開いてから、ログインしてください。"); return; }
+      $("af-pass").value = "";
+      go("board");
+    }).catch(function(err){ setMsg(authMsg(err), true); })
+      .then(function(){ $("af-submit").disabled = false; });
+  });
+
+  // arrived through the reset link: supabase-js has signed the user in, now ask for the new password
+  $("resetForm").addEventListener("submit", function(e){
+    e.preventDefault();
+    if (!client || !recovering) return;
+    var msg = function(t, err){ var m = $("rs-msg"); m.textContent = t || ""; m.className = "hint" + (err ? " err" : ""); };
+    var p1 = $("rs-pass").value, p2 = $("rs-pass2").value;
+    if (p1.length < 8){ msg("パスワードは8文字以上で入力してください。", true); return; }
+    if (p1 !== p2){ msg("確認用のパスワードが一致しません。", true); return; }
+    msg("");
+    $("rs-submit").disabled = true;
+    client.auth.updateUser({ password:p1 }).then(function(res){
+      if (res.error) throw res.error;
+      $("rs-pass").value = ""; $("rs-pass2").value = "";
+      recovering = false; stickyNotice = true; go("board");
+      say("パスワードを変更しました。", true);
+    }).catch(function(err){ msg(authMsg(err), true); })
+      .then(function(){ $("rs-submit").disabled = false; });
+  });
+
+  function logout(){
+    client.auth.signOut().catch(function(){}).then(function(){ go("board"); });
+  }
+
+  function applySession(session){
+    var u = session && session.user;
+    if (!u){ user = null; authReady = true; return afterAuth(); }
+    var meta = u.user_metadata || {};
+    var fallback = meta.display_name || (u.email || "").split("@")[0] || "user";
+    return client.from("profiles").select("display_name").eq("id", u.id).maybeSingle().then(function(res){
+      return (res.data && res.data.display_name) || fallback;
+    }, function(){ return fallback; }).then(function(name){
+      user = { id:u.id, email:u.email, displayName:name };
+      authReady = true; afterAuth();
+    });
+  }
+  function afterAuth(){
+    var id = user ? user.id : null, changed = id !== prevUserId;
+    prevUserId = id;
+    renderCompose();
+    if (changed){ myReplies = []; editing = null; armed = null; wdArmed = false; renderView(); }
+    route();
+  }
+
+  /* ---- my page ---- */
+  function loadHistory(){
+    if (!client || !user) return Promise.resolve();
+    return client.from("replies").select("thread_id, body, created_at").eq("user_id", user.id)
+      .order("created_at", { ascending:false }).limit(200).then(function(res){
+        if (res.error) throw res.error;
+        myReplies = res.data || [];
+        if (page === "mypage") renderMyPage();
+      }).catch(fail);
+  }
+
+  function renderMyPage(){
+    if (!user) return;
+    var nm = $("mp-name");
+    if (document.activeElement !== nm) nm.value = user.displayName;
+    $("mp-email").textContent = user.email || "";
+
+    var mine = threads.filter(function(t){ return t.userId === user.id; });
+    var ul = $("mp-threads");
+    ul.textContent = "";
+    if (!mine.length) ul.appendChild(h("li", { class:"empty", text:"まだスレッドを立てていません。" }));
+    mine.forEach(function(t){
+      var isArmed = armed === t.id;
+      ul.appendChild(h("li", { class:"mp-row" },
+        h("button", { type:"button", class:"thread-item", onclick:function(){ openThread(t.id); } },
+          h("span", { class:"t", text:t.title }),
+          h("span", { class:"m", text:"作成 " + fmt(t.createdAt) + " ・ 最終更新 " + fmt(t.updatedAt || t.createdAt) })),
+        h("div", { class:"mp-actions" },
+          h("button", { type:"button", class:"ghost danger" + (isArmed ? " armed" : ""), onclick:function(){
+            if (armed === t.id){ removePost("thread", t); } else { armed = t.id; renderMyPage(); }
+          } }, isArmed ? "スレッドごと削除する" : "削除"),
+          isArmed ? h("button", { type:"button", class:"ghost", onclick:function(){ armed = null; renderMyPage(); } }, "やめる") : null)));
+    });
+
+    var items = mine.map(function(t){ return { kind:"スレッド", id:t.id, title:t.title, body:t.body, at:t.createdAt }; });
+    myReplies.forEach(function(r){
+      var t = threads.filter(function(x){ return x.id === r.thread_id; })[0];
+      if (t) items.push({ kind:"返信", id:t.id, title:t.title, body:r.body, at:r.created_at });
+    });
+    items.sort(function(a, b){ return b.at - a.at; });
+    var hl = $("mp-history");
+    hl.textContent = "";
+    if (!items.length) hl.appendChild(h("li", { class:"empty", text:"まだ書き込みがありません。" }));
+    items.slice(0, 100).forEach(function(it){
+      hl.appendChild(h("li", null,
+        h("button", { type:"button", class:"thread-item", onclick:function(){ openThread(it.id); } },
+          h("span", { class:"t" }, h("span", { class:"badge", text:it.kind }), it.title),
+          h("span", { class:"m snippet", text:fmt(it.at) + " ・ " + it.body.replace(/\s+/g, " ") }))));
+    });
+
+    var w = $("mp-withdraw");
+    w.textContent = "";
+    w.appendChild(h("h2", { text:"退会" }));
+    w.appendChild(h("p", { text: wdArmed
+      ? "アカウントと、あなたが立てたスレッド(他の人の返信も含む)、あなたの書き込みがすべて削除されます。元に戻せません。"
+      : "アカウントと書き込みをすべて削除します。" }));
+    w.appendChild(wdArmed
+      ? h("div", { class:"row" },
+          h("button", { type:"button", class:"btn danger", onclick:withdraw }, "本当に退会する"),
+          h("button", { type:"button", class:"ghost", onclick:function(){ wdArmed = false; renderMyPage(); } }, "やめる"))
+      : h("div", { class:"row" }, h("button", { type:"button", class:"ghost danger", onclick:function(){ wdArmed = true; renderMyPage(); } }, "退会する")));
+  }
+
+  $("profileForm").addEventListener("submit", function(e){
+    e.preventDefault();
+    if (!user) return;
+    var v = $("mp-name").value.trim();
+    if (!v){ say("表示名を入力してください。"); return; }
+    if (v === user.displayName){ say("表示名は変わっていません。", true); return; }
+    say("");
+    client.from("profiles").update({ display_name:v }).eq("id", user.id).select("display_name").then(function(res){
+      if (res.error) throw res.error;
+      if (!res.data || !res.data.length) throw new Error("no row updated");
+      user.displayName = v;                 // past posts follow via a DB trigger and arrive through realtime
+      renderAccount(); renderCompose(); renderView();
+      say("表示名を変更しました。", true);
+    }).catch(function(){ say("表示名を変更できませんでした。時間をおいてもう一度お試しください。"); });
+  });
+
+  function withdraw(){
+    run(function(){
+      return client.rpc("delete_my_account").then(function(res){
+        if (res.error) throw res.error;
+        return client.auth.signOut({ scope:"local" });
+      }).then(function(){
+        wdArmed = false; stickyNotice = true; go("board");
+        say("退会しました。ご利用ありがとうございました。", true);
+      });
+    });
+  }
+
   $("nt-name").value = getName();
   $("newForm").addEventListener("submit", function(e){
     e.preventDefault();
-    var title = $("nt-title").value.trim(), name = $("nt-name").value.trim(), body = $("nt-body").value.trim();
+    if (!canWrite()) return;
+    var title = $("nt-title").value.trim(), name = memMode ? $("nt-name").value.trim() : user.displayName, body = $("nt-body").value.trim();
     if (!title || !body) return;
-    saveName(name);
+    if (memMode) saveName(name);
     run(function(){
       var now = Date.now();
       return db.collection("threads").add({ title:title, name:name, body:body, createdAt:now, updatedAt:now }).then(function(ref){
@@ -491,6 +878,7 @@ body{margin:0}
     db.collection("threads").orderBy("updatedAt", "desc").onSnapshot(function(snap){
       threads = snap.docs.map(function(d){ return Object.assign({ id:d.id }, d.data()); });
       renderList();
+      if (page === "mypage") renderMyPage();
       if (selectedId) {
         var f = document.activeElement && document.activeElement.id;
         if (f === "rp-body" || f === "edit-body" || f === "edit-title") return;
@@ -506,12 +894,34 @@ body{margin:0}
 
   renderList();
   if (SUPABASE_URL && SUPABASE_KEY && window.supabase){
-    db = makeSupabase(window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY));
+    client = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    db = makeSupabase(client);
   } else {
     if (SUPABASE_URL && SUPABASE_KEY) say("Supabase に接続できなかったため、この端末のブラウザ内だけで動作しています。");
     db = makeMem(); memMode = true;
   }
   start();
+  if (client){
+    // defer: supabase-js must not be called from inside its own auth callback
+    client.auth.onAuthStateChange(function(event, session){
+      setTimeout(function(){
+        Promise.resolve(applySession(session)).then(function(){
+          if (event === "PASSWORD_RECOVERY" && user){ recovering = true; go("reset"); }
+        });
+      }, 0);
+    });
+  } else {
+    authReady = true;
+  }
+  window.addEventListener("hashchange", route);
+  renderCompose(); renderAccount();
+  if (client && /[#&]error_code=/.test(location.hash)){
+    // expired / already-used email link (supabase puts the error in the URL hash)
+    redirect("login");
+    setMsg("リンクの有効期限が切れているか、すでに使われています。ログインするか、パスワードの再設定をお試しください。", true);
+  } else {
+    route();
+  }
 })();
 </script>
 </body>
