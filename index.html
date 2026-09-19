@@ -121,8 +121,14 @@ body{margin:0}
   </main>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.116.0/dist/umd/supabase.min.js" integrity="sha384-JBR+x8blGwjDRO63aHCGiZMD4VNiTR4ZUGA+N6ZKLf3zNt1fK8IBpcgPaMrxqWBp" crossorigin="anonymous"></script>
 <script>
 (function(){
+  /* Supabase の「Project Settings > API」にある Project URL と anon(publishable)キーを設定します。
+     どちらも公開前提の値です(アクセス制御は RLS が担当)。空のままだとブラウザ内保存で動きます。 */
+  var SUPABASE_URL = "https://ygubxmuxsojbuvzqzjrh.supabase.co";
+  var SUPABASE_KEY = "sb_publishable_KFBsbW-xAAtsRYMlPrjxOQ_hgH2hEwq";
+
   var DEFAULT_NAME = "名無しさん";
   var $ = function(id){ return document.getElementById(id); };
 
@@ -204,6 +210,86 @@ body{margin:0}
     return { collection:col, hadData:hadData };
   }
 
+  /* ---- Supabase adapter with the same call shape as the db capability ----
+     "threads" -> table threads, "threads/<id>/replies" -> table replies filtered by thread_id */
+  function makeSupabase(client){
+    var subs = [], seq = 0;
+    function snake(k){ return k.replace(/[A-Z]/g, function(c){ return "_" + c.toLowerCase(); }); }
+    function camel(k){ return k.replace(/_([a-z])/g, function(_, c){ return c.toUpperCase(); }); }
+    function mapKeys(o, f){ var r = {}; Object.keys(o).forEach(function(k){ r[f(k)] = o[k]; }); return r; }
+    function check(res){ if (res.error) throw res.error; return res.data; }
+    function uuid(){
+      var b = crypto.getRandomValues(new Uint8Array(16));
+      b[6] = (b[6] & 15) | 64; b[8] = (b[8] & 63) | 128;
+      var x = Array.from(b, function(n){ return n.toString(16).padStart(2, "0"); }).join("");
+      return x.slice(0,8) + "-" + x.slice(8,12) + "-" + x.slice(12,16) + "-" + x.slice(16,20) + "-" + x.slice(20);
+    }
+    // resolves once every live subscriber on the table has re-read, so callers see their own write
+    function refresh(table){
+      return Promise.all(subs.filter(function(s){ return s.table === table; }).map(function(s){ return s.fn(); }));
+    }
+    function col(path){
+      var p = path.split("/");
+      var table = p.length === 3 ? p[2] : p[0], parent = p.length === 3 ? p[1] : null;
+      function query(o){
+        var q = client.from(table).select("*");
+        if (parent) q = q.eq("thread_id", parent);
+        if (o) q = q.order(snake(o.f), { ascending: o.d !== "desc" });
+        return q.then(check);
+      }
+      function snap(rows){
+        var docs = rows.map(function(r){
+          var d = mapKeys(r, camel); delete d.id; delete d.threadId;
+          return { id:r.id, exists:true, data:function(){ return d; } };
+        });
+        return { docs:docs, size:docs.length, empty:!docs.length };
+      }
+      function row(id, d){
+        var r = mapKeys(d, snake); r.id = id;
+        if (parent) r.thread_id = parent;
+        return r;
+      }
+      function mk(o){
+        return {
+          orderBy:function(f,d){ return mk({f:f,d:d||"asc"}); },
+          get:function(){ return query(o).then(snap); },
+          onSnapshot:function(next, onErr){
+            var alive = true;
+            var fn = function(){
+              return query(o).then(function(rows){ if (alive) next(snap(rows)); })
+                .catch(function(e){ if (alive && onErr) onErr(e); });
+            };
+            var entry = { table:table, fn:fn };
+            subs.push(entry);
+            var ch = client.channel("bbs-" + table + "-" + (++seq))
+              .on("postgres_changes", { event:"*", schema:"public", table:table }, fn)
+              .subscribe();
+            fn();
+            return function(){ alive = false; subs = subs.filter(function(s){ return s !== entry; }); client.removeChannel(ch); };
+          }
+        };
+      }
+      var ref = mk(null);
+      ref.doc = function(id){
+        id = id || uuid();
+        function done(){ return refresh(table); }
+        return {
+          id:id,
+          set:function(d){ return client.from(table).upsert(row(id, d)).then(check).then(done); },
+          update:function(d){ return client.from(table).update(mapKeys(d, snake)).eq("id", id).then(check).then(done); },
+          delete:function(){ return client.from(table).delete().eq("id", id).then(check).then(done); },
+          collection:function(s){ return col(path + "/" + id + "/" + s); }
+        };
+      };
+      ref.add = function(d){
+        var r = ref.doc();
+        return client.from(table).insert(row(r.id, d)).then(check).then(function(){ return refresh(table); }).then(function(){ return r; });
+      };
+      return ref;
+    }
+    return { collection:col };
+  }
+
   /* ---- state ---- */
   var db = null, memMode = false;
   var threads = [], replies = [], selectedId = null;
@@ -220,7 +306,7 @@ body{margin:0}
   function fail(e){
     var c = e && e.code;
     if (c === "quota_exceeded") say("保存できる件数の上限に達しました。古いスレッドを削除してからもう一度お試しください。");
-    else if (c === "invalid_argument") say("この掲示板への書き込み権限がありません。閲覧のみのアカウントの可能性があります。");
+    else if (c === "invalid_argument" || c === "42501") say("この掲示板への書き込み権限がありません。閲覧のみのアカウントの可能性があります。");
     else say("保存できませんでした。少し待ってからもう一度お試しください。");
   }
   function run(fn){
@@ -395,7 +481,7 @@ body{margin:0}
   });
 
   function start(){
-    $("status").textContent = "この端末のブラウザに保存されます";
+    $("status").textContent = memMode ? "この端末のブラウザに保存されます" : "みんなで共有されています";
     if (memMode && !db.hadData){
       var now = Date.now();
       var t = db.collection("threads");
@@ -419,7 +505,13 @@ body{margin:0}
   }
 
   renderList();
-  db = makeMem(); memMode = true; start();
+  if (SUPABASE_URL && SUPABASE_KEY && window.supabase){
+    db = makeSupabase(window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY));
+  } else {
+    if (SUPABASE_URL && SUPABASE_KEY) say("Supabase に接続できなかったため、この端末のブラウザ内だけで動作しています。");
+    db = makeMem(); memMode = true;
+  }
+  start();
 })();
 </script>
 </body>
